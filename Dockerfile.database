@@ -1,7 +1,0 @@
-FROM postgres:trixie
-
-WORKDIR /app
-
-EXPOSE 4321
-
-CMD ["postgres", "-p", "4321"]

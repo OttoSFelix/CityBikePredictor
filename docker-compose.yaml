@@ -9,6 +9,22 @@ services:
       PASSWORD: ${PASSWORD}
       DB_HOST: host.docker.internal
       DB_PORT: 4321
+      API_KEY: ${API_KEY}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: on-failure
+  trainer:
+    build:
+      context: .
+      dockerfile: Dockerfile.trainer
+    container_name: trainer
+    environment:
+      USER: ${USER}
+      PASSWORD: ${PASSWORD}
+      DB_HOST: host.docker.internal
+      DB_PORT: 4321
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./training_loss.png:/app/training_loss.png
+      - ./parameters:/app/parameters

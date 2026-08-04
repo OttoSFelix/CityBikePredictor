@@ -7,7 +7,7 @@ import os
 import json
 
 
-DIGITRANSIT_API_KEY = "19c836f327194d7094ea4abeab0483a7"
+DIGITRANSIT_API_KEY = os.environ.get('API_KEY')
 if os.path.exists('.env'):
     try:
         from dotenv import load_dotenv
@@ -228,8 +228,6 @@ if __name__ == "__main__":
     fetch_bike_stations()
 
     print("Initializing API Watcher...")
-
-    poll_and_store()
 
     scheduler = BlockingScheduler()
     scheduler.add_job(poll_and_store, 'cron', minute='*/5')

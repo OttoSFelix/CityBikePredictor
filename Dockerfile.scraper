@@ -4,10 +4,10 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-COPY requirements_data.txt .
+COPY data/requirements_data.txt .
 
 RUN pip install --no-cache-dir -r requirements_data.txt
 
-COPY scraper.py .
+COPY data/scraper.py .
 
 CMD ["python3", "scraper.py"]
