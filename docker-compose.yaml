@@ -28,3 +28,18 @@ services:
     volumes:
       - ./training_loss.png:/app/training_loss.png
       - ./parameters:/app/parameters
+  inference:
+    build:
+      context: .
+      dockerfile: Dockerfile.inference
+    container_name: inference
+    environment:
+      USER: ${USER}
+      PASSWORD: ${PASSWORD}
+      DB_HOST: host.docker.internal
+      DB_PORT: 4321
+      API_KEY: ${API_KEY}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./parameters:/app/parameters

@@ -165,8 +165,6 @@ def fetch_traffic():
 
 def fetch_rainfall():
     """Fetches rainfall in Helsinki over the last hour using FMI WFS."""
-    # FMI returns XML. We use the 'simple' stored query for easier parsing.
-    # rr_1h is the parameter for 1-hour precipitation amount.
     url = (
         "https://opendata.fmi.fi/wfs?service=WFS&version=2.0.0"
         "&request=getFeature&storedquery_id=fmi::observations::weather::simple"
@@ -176,11 +174,9 @@ def fetch_rainfall():
     response = requests.get(url, timeout=10)
     response.raise_for_status()
 
-    # FMI uses heavy XML namespaces. A quick way to find the value is using XPath.
     root = ET.fromstring(response.content)
     namespaces = {'BsWfs': 'http://xml.fmi.fi/schema/wfs/2.0'}
 
-    # Grab the most recent parameter value (which is precipitation in mm)
     values = root.findall('.//BsWfs:ParameterValue', namespaces)
     if values:
         try:

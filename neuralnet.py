@@ -22,19 +22,19 @@ class PytorchModel(nn.Module):
         self.embedding = nn.Embedding(num_embeddings=num_stations, embedding_dim=16)
 
         self.main_network = nn.Sequential(
-            nn.Linear(23, 512),
+            nn.Linear(23, 1024),
             nn.ReLU(),
 
-            nn.Linear(512, 512),
+            nn.Linear(1024, 512),
             nn.ReLU(),
 
-            nn.Linear(512, 128),
+            nn.Linear(512, 256),
             nn.ReLU(),
 
-            nn.Linear(128, 32),
+            nn.Linear(256, 64),
             nn.ReLU(),
 
-            nn.Linear(32, 3)
+            nn.Linear(64, 3)
         )
 
     def forward(self, X):
