@@ -15,6 +15,7 @@ from skorch.dataset import ValidSplit
 import matplotlib.pyplot as plt
 import joblib
 import numpy as np
+import signal
 
 class PytorchModel(nn.Module):
     def __init__(self, num_stations):
@@ -22,19 +23,16 @@ class PytorchModel(nn.Module):
         self.embedding = nn.Embedding(num_embeddings=num_stations, embedding_dim=16)
 
         self.main_network = nn.Sequential(
-            nn.Linear(23, 1024),
+            nn.Linear(23, 2048),
+            nn.ReLU(),
+
+            nn.Linear(2048, 1024),
             nn.ReLU(),
 
             nn.Linear(1024, 512),
             nn.ReLU(),
 
-            nn.Linear(512, 256),
-            nn.ReLU(),
-
-            nn.Linear(256, 64),
-            nn.ReLU(),
-
-            nn.Linear(64, 3)
+            nn.Linear(512, 3)
         )
 
     def forward(self, X):
@@ -169,7 +167,7 @@ class NeuralNetwork:
         self.model = PytorchModel(num_stations)
 
         lr = 0.0003
-        max_epochs = 100
+        max_epochs = 60
         batch_size = 256
         lr_patience = 3
         lr_factor = 0.3
@@ -190,14 +188,21 @@ class NeuralNetwork:
             ]
         )
 
-        self.net.fit(X_train_scaled, y_train)
+        try:
+            self.net.fit(X_train_scaled, y_train)
+        except KeyboardInterrupt:
+            print("\nTraining interrupted by user.")
 
-        losses = self.net.history[:, 'train_loss']
+        try:
+            losses = self.net.history[:, 'train_loss']
+        except (KeyError, IndexError):
+            losses = []
 
         raw_accuracy = self.net.score(X_test_scaled, y_test)
         print(f"Overall raw accuracy: {raw_accuracy:.4f}")
 
-        y_pred = self.net.predict(X_test_scaled)
+        y_probs = self.net.predict_proba(X_test_scaled)
+        y_pred = self.apply_custom_thresholds(y_probs)
         y_test_np = y_test.numpy()
 
         print("\n--- Detailed Classification Report ---")
@@ -234,6 +239,10 @@ class NeuralNetwork:
         joblib.dump(self.encoder, f'./parameters/model_encoder.joblib')
         print(f'Parameters saved.')
 
+    def stop_training(self, signum=None, frame=None):
+        print("\nKeyboard interrupt received. Stopping training...")
+        raise KeyboardInterrupt
+
 
     def testi(self):
         tensor = torch.tensor([3], dtype=torch.float32)
@@ -249,6 +258,7 @@ class NeuralNetwork:
 
 if __name__ == '__main__':
     network = NeuralNetwork()
+    signal.signal(signal.SIGINT, network.stop_training)
     network.train(graph=True)
-    network.save_weights()
+    # network.save_weights()
 

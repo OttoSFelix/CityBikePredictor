@@ -33,6 +33,11 @@ class Inference:
         self.predictions = {}
         self.station_lookup = {}
 
+        self.outflow_treshold = 0.36
+        self.inflow_treshold = 0.35
+
+        self.tensors = []
+
         self.initialize_lookup_map()
 
     def initialize_lookup_map(self):
@@ -126,13 +131,14 @@ class Inference:
             if bikes_info is not None:
                 by_type = bikes_info.get('byType')
                 if isinstance(by_type, list):
-                    total_bikes = sum(item.get('count', 0) for item in by_type if isinstance(item, dict))
+                    total_bikes = sum(item.get('count', None) for item in by_type if isinstance(item, dict))
                 else:
-                    total_bikes = 0
-                cleaned_stations.append({
-                    "station_id": s["stationId"],
-                    "bikes": total_bikes,
-                })
+                    total_bikes = None
+                if total_bikes:
+                    cleaned_stations.append({
+                        "station_id": s["stationId"],
+                        "bikes": total_bikes,
+                    })
 
         return cleaned_stations
 
@@ -156,8 +162,16 @@ class Inference:
 
         with torch.no_grad():
             prediction = self._model(tensor)
+            probabilities = torch.nn.functional.softmax(prediction, dim=1)
 
-        return torch.argmax(prediction, dim=1).item()
+        self.tensors.append(probabilities)
+
+        
+        if probabilities[0][0].item() >= self.outflow_treshold:
+            return 0
+        if probabilities[0][1].item() >= self.inflow_treshold:
+            return 1
+        return 2
 
     def measure_inference(self):
         time = datetime.now()
@@ -204,6 +218,7 @@ class Inference:
 
         correct = 0
         total = 0
+        pred_distribution = {1: [0, 0], 0: [0, 0], 2: [0, 0]}
 
         num_snapshots = len(self.predictions)
         for n in range(num_snapshots - 6):
@@ -227,13 +242,27 @@ class Inference:
                     if isinstance(predicted_class, torch.Tensor):
                         predicted_class = torch.argmax(predicted_class).item()
 
+                    pred_distribution[predicted_class][1] += 1
                     if predicted_class == actual_class:
                         correct += 1
+                        pred_distribution[predicted_class][0] += 1
                     total += 1
 
+
         if total > 0:
+            out_correct, out_total = pred_distribution[0][0], pred_distribution[0][1]
+            in_correct, in_total = pred_distribution[1][0], pred_distribution[1][1]
+            stable_correct, stable_total = pred_distribution[2][0], pred_distribution[2][1]
             accuracy = correct / total
-            print(f"Model Accuracy: {accuracy:.4f} ({correct}/{total} predictions correct)")
+            out_accuracy = out_correct / out_total if out_total > 0 else 0
+            in_accuracy = in_correct / in_total if in_total > 0 else 0
+            stable_accuracy = stable_correct / stable_total if stable_total > 0 else 0
+            print(f"Total Accuracy: {accuracy:.4f} ({correct}/{total} predictions correct)")
+            print(f"Outflow Accuracy: {out_accuracy:.4f} ({out_correct}/{out_total} predictions correct)")
+            print(f"Inflow Accuracy: {in_accuracy:.4f} ({in_correct}/{in_total} predictions correct)")
+            print(f"Stable Accuracy: {stable_accuracy:.4f} ({stable_correct}/{stable_total} predictions correct)")
+
+
             return accuracy
         else:
             print("Not enough predictions to measure accuracy (requires at least 7 5-minute snapshots / 30 minutes).")
@@ -242,7 +271,7 @@ class Inference:
 
 if __name__ == '__main__':
     inf = Inference()
-    inf.start_live_inference(3600)
+    inf.start_live_inference(4000)
 
 
 
