@@ -3,7 +3,7 @@ import torch.nn as nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import psycopg2
 import os
-from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.preprocessing import StandardScaler, LabelEncoder, RobustScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, confusion_matrix, f1_score
 from sklearn.utils.class_weight import compute_class_weight
@@ -23,16 +23,16 @@ class PytorchModel(nn.Module):
         self.embedding = nn.Embedding(num_embeddings=num_stations, embedding_dim=16)
 
         self.main_network = nn.Sequential(
-            nn.Linear(23, 2048),
-            nn.ReLU(),
-
-            nn.Linear(2048, 1024),
+            nn.Linear(23, 1024),
             nn.ReLU(),
 
             nn.Linear(1024, 512),
             nn.ReLU(),
 
-            nn.Linear(512, 3)
+            nn.Linear(512, 256),
+            nn.ReLU(),
+
+            nn.Linear(256, 3)
         )
 
     def forward(self, X):
@@ -75,6 +75,7 @@ class NeuralNetwork:
         return total_time
 
     def apply_custom_thresholds(self, probs, threshold_outflow=0.30, threshold_inflow=0.30):
+        print(f'Applying custom threshold: {threshold_outflow}, {threshold_inflow}')
         y_pred = np.full(probs.shape[0], 2)
         p_out = probs[:, 0]
         p_in = probs[:, 1]
@@ -87,33 +88,41 @@ class NeuralNetwork:
         print('Fetching data...')
         query = """
         WITH traffic_aggregated AS (
-        SELECT
-            date_trunc('minute', tr.timestamp) as time,
-            sm.bike_station_id,
-            AVG(tr.volume) as mean_volume
-        FROM traffic_readings tr
-        JOIN station_mapping sm
-            ON tr.sensor_id IN (sm.tms_sensor_1, sm.tms_sensor_2, sm.tms_sensor_3)
-        GROUP BY 1, 2
-    ),
-    ordered_snapshots AS (
-        SELECT
-            br.station_id,
-            date_trunc('minute', br.timestamp) as time,
-            br.bikes,
-            ta.mean_volume,
-            wr.rainfall_mm,
-            LEAD(br.bikes, 6) OVER (PARTITION BY br.station_id ORDER BY br.timestamp) as future_bikes
-        FROM bike_readings br
-        JOIN weather_readings wr
-            ON date_trunc('minute', br.timestamp) = date_trunc('minute', wr.timestamp)
-        JOIN traffic_aggregated ta
-            ON ta.time = date_trunc('minute', br.timestamp)
-            AND ta.bike_station_id = br.station_id
-    )
-    SELECT * FROM ordered_snapshots
-    WHERE future_bikes IS NOT NULL
-    ORDER BY station_id, time;
+            SELECT 
+                date_trunc('minute', tr.timestamp) as time, 
+                sm.bike_station_id,
+                AVG(tr.volume) as mean_volume
+            FROM traffic_readings tr
+            JOIN station_mapping sm 
+                ON tr.sensor_id IN (sm.tms_sensor_1, sm.tms_sensor_2, sm.tms_sensor_3)
+            GROUP BY 1, 2
+        ),
+        base_snapshots AS (
+            SELECT 
+                br.station_id,
+                date_trunc('minute', br.timestamp) as time, 
+                br.bikes,
+                ta.mean_volume,
+                wr.rainfall_mm
+            FROM bike_readings br
+            JOIN weather_readings wr 
+                ON date_trunc('minute', br.timestamp) = date_trunc('minute', wr.timestamp)
+            JOIN traffic_aggregated ta
+                ON ta.time = date_trunc('minute', br.timestamp) 
+                AND ta.bike_station_id = br.station_id
+        )
+        SELECT 
+            current_data.station_id,
+            current_data.time,
+            current_data.bikes,
+            current_data.mean_volume,
+            current_data.rainfall_mm,
+            future_data.bikes as future_bikes
+        FROM base_snapshots current_data
+        INNER JOIN base_snapshots future_data
+            ON current_data.station_id = future_data.station_id
+            AND future_data.time = current_data.time + INTERVAL '30 minutes'
+        ORDER BY current_data.station_id, current_data.time;
         """
         self.cursor.execute(query)
         data = self.cursor.fetchall()
@@ -201,8 +210,7 @@ class NeuralNetwork:
         raw_accuracy = self.net.score(X_test_scaled, y_test)
         print(f"Overall raw accuracy: {raw_accuracy:.4f}")
 
-        y_probs = self.net.predict_proba(X_test_scaled)
-        y_pred = self.apply_custom_thresholds(y_probs)
+        y_pred = self.net.predict(X_test_scaled)
         y_test_np = y_test.numpy()
 
         print("\n--- Detailed Classification Report ---")

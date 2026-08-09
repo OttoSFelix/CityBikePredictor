@@ -33,7 +33,7 @@ class Inference:
         self.predictions = {}
         self.station_lookup = {}
 
-        self.outflow_treshold = 0.36
+        self.outflow_treshold = 0.363
         self.inflow_treshold = 0.35
 
         self.tensors = []
@@ -165,6 +165,7 @@ class Inference:
             probabilities = torch.nn.functional.softmax(prediction, dim=1)
 
         self.tensors.append(probabilities)
+        return torch.argmax(prediction, dim=1).item()
 
         
         if probabilities[0][0].item() >= self.outflow_treshold:
