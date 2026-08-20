@@ -65,6 +65,16 @@ def map_nearest_sensors(bike_stations, tms_stations):
     return mapping
 
 def backfill():
+    create_table = """
+    CREATE TABLE IF NOT EXISTS station_mapping (
+    bike_station_id VARCHAR(50) PRIMARY KEY,
+    tms_sensor_1 INTEGER,
+    tms_sensor_2 INTEGER,
+    tms_sensor_3 INTEGER
+);
+    """
+    cursor.execute(create_table)
+
     bike_query = """
     SELECT station_id AS id, lat, lon
     FROM bike_stations
